@@ -80,3 +80,6 @@ class DeletePost(graphene.Mutation):
         except Exception as e:
             errors = [ErrorType(field="errors", messages=[str(e)])]
             return DeletePost(success=False, errors=errors)
+
+
+# hi
