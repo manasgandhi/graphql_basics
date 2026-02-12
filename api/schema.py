@@ -1,9 +1,10 @@
 import graphene
 from django.shortcuts import get_object_or_404
+from .decorators import login_required_graphql
 from .models import Post, User, Comment
 from .types import UserType, PostType, CommentType
 from .utils import get_requested_fields
-from .mutations import CreatePost, UpdatePost, DeletePost
+from .mutations import CreatePost, UpdatePost, DeletePost, Login, Logout
 
 
 class Query(graphene.ObjectType):
@@ -15,6 +16,9 @@ class Query(graphene.ObjectType):
         created_after=graphene.DateTime(),
         created_before=graphene.DateTime(),
     )
+    my_posts = graphene.List(PostType)
+
+    me = graphene.Field(UserType)
     user = graphene.Field(UserType, id=graphene.String(required=True))
     all_users = graphene.List(
         UserType,
@@ -54,6 +58,29 @@ class Query(graphene.ObjectType):
             queryset = queryset.prefetch_related("comments")
 
         return queryset
+
+    @login_required_graphql
+    def resolve_my_posts(
+        root, info, title_contains=None, created_after=None, created_before=None
+    ):
+        fields = get_requested_fields(info=info)
+
+        queryset = Post.objects.filter(author_id=info.context.user.id).all()
+        if title_contains:
+            queryset = queryset.filter(title__icontains=title_contains)
+        if created_after:
+            queryset = queryset.filter(created_at__gte=created_after)
+        if created_before:
+            queryset = queryset.filter(created_at__lte=created_before)
+        if "author" in fields:
+            queryset = queryset.select_related("author")
+        if "comments" in fields:
+            queryset = queryset.prefetch_related("comments")
+
+        return queryset
+
+    def resolve_me(root, info):
+        return info.context.user
 
     def resolve_user(root, info, id):
         return get_object_or_404(User, pk=id)
@@ -100,6 +127,8 @@ class Mutation(graphene.ObjectType):
     create_post = CreatePost.Field()
     update_post = UpdatePost.Field()
     delete_post = DeletePost.Field()
+    login = Login.Field()
+    logout = Logout.Field()
 
 
 schema = graphene.Schema(query=Query, mutation=Mutation)
